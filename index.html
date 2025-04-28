@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Serpent</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: black; }
+        canvas#gameCanvas { /* More specific selector */
+            display: block; /* Already there, but good to keep */
+            position: absolute; /* Position relative to the body */
+            top: 0;
+            left: 0;
+            width: 100%;  /* Make canvas element fill viewport width */
+            height: 100%; /* Make canvas element fill viewport height */
+            z-index: 1;   /* Ensure canvas is above the video (z-index: -1) */
+        }
+        #backgroundVideo {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: -1; /* Place behind the canvas */
+        }
+    </style>
+</head>
+<body>
+    <video id="backgroundVideo" autoplay loop muted playsinline>
+        <!-- Using the compat version for broader support -->
+        <source src="/cave_city_h264_compat.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+    <canvas id="gameCanvas"></canvas>
+    <div id="loadingScreen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.9); color: white; display: flex; justify-content: center; align-items: center; font-size: 2em; z-index: 100;">
+        Loading...
+    </div>
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>

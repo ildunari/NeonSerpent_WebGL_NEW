@@ -1,0 +1,18 @@
+{
+  "name": "neonserpent_webgl",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite --port 6161",
+    "build": "vite build",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "gl-matrix": "^3.4.3",
+    "vite": "^6.3.3"
+  }
+}
