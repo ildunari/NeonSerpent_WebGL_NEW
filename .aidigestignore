@@ -1,0 +1,13 @@
+# Ignore configuration files
+.gitignore
+package.json
+tsconfig.json
+
+# Ignore documentation
+Game_Layout.md
+
+# Ignore main HTML file
+index.html
+
+# Ignore assets (optional, uncomment if needed)
+# public/ 

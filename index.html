@@ -6,36 +6,249 @@
     <title>Neon Serpent</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: black; }
-        canvas#gameCanvas { /* More specific selector */
-            display: block; /* Already there, but good to keep */
-            position: absolute; /* Position relative to the body */
+        #pixi-container {
+            position: absolute;
             top: 0;
             left: 0;
-            width: 100%;  /* Make canvas element fill viewport width */
-            height: 100%; /* Make canvas element fill viewport height */
-            z-index: 1;   /* Ensure canvas is above the video (z-index: -1) */
+            width: 100%;
+            height: 100%;
+            z-index: 1; /* Above video, below UI */
+            /* pointer-events: auto; Let Pixi handle events on its canvas */
+            /* Note: PixiJS canvas inside will handle pointer events */
         }
-        #backgroundVideo {
+        #backgroundWrap{
+          position:fixed;inset:0;overflow:hidden;z-index:-1;
+          transition:transform .5s ease;          /* zoom ONLY */
+          will-change:transform;
+        }
+        #parallaxWrap{
+          position:absolute;inset:0;
+          will-change:transform;                  /* translate ONLY */
+        }
+        #backgroundVideo{
+          width:100%;height:100%;object-fit:cover;
+          /* Removed position, top, left, transform-origin, transition */
+        }
+
+        /* --- UI Menu Styles --- */
+        .menu-overlay {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            object-fit: cover;
-            z-index: -1; /* Place behind the canvas */
+            background-color: rgba(0, 0, 0, 0.7); /* Semi-transparent black */
+            color: #00ffcc; /* Neon cyan text */
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 50; /* Above canvas, below loading screen */
+            text-align: center;
+            border: 2px solid #00ffcc;
+            box-shadow: 0 0 15px #00ffcc;
+            /* Keep border/shadow for other menus */
         }
-    </style>
-</head>
-<body>
-    <video id="backgroundVideo" autoplay loop muted playsinline>
-        <!-- Using the compat version for broader support -->
-        <source src="/cave_city_h264_compat.mp4" type="video/mp4">
-        Your browser does not support the video tag.
-    </video>
-    <canvas id="gameCanvas"></canvas>
-    <div id="loadingScreen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.9); color: white; display: flex; justify-content: center; align-items: center; font-size: 2em; z-index: 100;">
+
+        /* Specific adjustments for Controls overlay */
+        #controlsMenu {
+            border: none; /* Remove border from the full overlay */
+            box-shadow: none; /* Remove shadow from the full overlay */
+            background-color: rgba(0, 0, 0, 0.3); /* Make overlay slightly darker for contrast */
+        }
+
+        /* Style for the inner content panel */
+        #controlsContent {
+            background-color: rgba(10, 25, 30, 0.85); /* Dark, slightly transparent teal background */
+            padding: 30px 50px;
+            border-radius: 10px;
+            border: 1px solid #00ffcc;
+            box-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
+            max-width: 600px; /* Limit width of the panel */
+        }
+
+        /* Class to apply backdrop blur */
+        .menu-overlay.backdrop-blur {
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px); /* Safari support */
+        }
+
+        .menu-overlay.hidden {
+            display: none;
+        }
+
+        .menu-overlay h2 {
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 0 0 10px #00ffcc;
+        }
+
+        .menu-overlay button {
+            background-color: transparent;
+            border: 2px solid #00ffcc;
+            color: #00ffcc;
+            padding: 15px 30px;
+            margin: 10px;
+            font-size: 1.5em;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
+            min-width: 250px; /* Ensure buttons have a decent width */
+        }
+
+        .menu-overlay button:hover,
+        .menu-overlay button:focus {
+            background-color: #00ffcc;
+            color: black;
+            box-shadow: 0 0 15px #00ffcc;
+            outline: none;
+        }
+
+        #controlsMenu p {
+            margin: 5px 0;
+            font-size: 1.2em;
+        }
+        #controlsMenu .controls-section {
+            margin-bottom: 20px;
+        }
+
+        #gameOverMenu .score {
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            color: #ff00ff; /* Neon pink for score */
+            text-shadow: 0 0 10px #ff00ff;
+        }
+
+        /* In-game leaderboard styles */
+        #pauseLeaderboard {
+            margin-top: 20px; /* Space above leaderboard */
+            width: 80%;
+            max-width: 350px;
+            max-height: 40vh; /* Limit height */
+            overflow-y: auto;
+            border: 1px solid rgba(0, 255, 204, 0.5); /* Fainter border */
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.2); /* Slightly darker background */
+        }
+        #pauseLeaderboard h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.4em;
+            color: #ff00ff; /* Neon pink title */
+            text-shadow: 0 0 8px #ff00ff;
+        }
+        #pauseLeaderboard ol {
+            list-style: none; /* Remove default numbering */
+            padding: 0;
+            margin: 0;
+            text-align: left;
+        }
+        #pauseLeaderboard li {
+            display: flex;
+            justify-content: space-between;
+            padding: 3px 5px;
+            font-size: 1.1em;
+            border-bottom: 1px dashed rgba(0, 255, 204, 0.3);
+        }
+        #pauseLeaderboard li:last-child {
+            border-bottom: none;
+        }
+        #pauseLeaderboard .leaderboard-name {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 70%; /* Prevent long names from overlapping score */
+        }
+        #pauseLeaderboard .leaderboard-score {
+            font-weight: bold;
+            color: #ffffff; /* White score */
+        }
+        #pauseLeaderboard .player-score { /* Highlight player score */
+            color: #00ffcc; /* Neon cyan */
+            font-weight: bold;
+        }
+
+/* Mini leaderboard HUD */
+#inGameLeaderboard{
+  position:fixed;top:40px;right:10px;
+  font-family:"Courier New",monospace;
+  font-size:14px;line-height:1.2;
+  color:#ff00ff;text-align:right;
+  background:rgba(0,0,0,.25);
+  padding:6px 10px;border:1px solid rgba(0,255,204,.4);
+  border-radius:6px;
+  max-width:180px;pointer-events:none;
+  z-index:45;
+}
+#inGameLeaderboard .mini-row.player{color:#00ffcc;font-weight:bold;}
+/* Hide on narrow screens (<768 px) */
+@media (max-width:767px){#inGameLeaderboard{display:none;}}
+
+ </style>
+ </head>
+ <body>
+     <div id="backgroundWrap">          <!-- zoom (CSS transition) -->
+       <div id="parallaxWrap">          <!-- translate3d every frame -->
+         <video id="backgroundVideo" autoplay loop muted playsinline>
+           <source src="/cave_city_h264_compat.mp4" type="video/mp4">
+         </video>
+       </div>
+     </div>
+     <div id="pixi-container"></div> <!-- PixiJS will add its canvas here -->
+     <!-- Mini leaderboard HUD (hidden via media query on phones) -->
+     <div id="inGameLeaderboard"></div>
+     <div id="loadingScreen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.9); color: white; display: flex; justify-content: center; align-items: center; font-size: 2em; z-index: 100;">
         Loading...
     </div>
-    <script type="module" src="/src/main.js"></script>
+
+    <!-- UI Menus -->
+    <div id="mainMenu" class="menu-overlay">
+        <h2>Neon Serpent</h2>
+        <button id="startGameBtn">Start New Game</button>
+        <button id="controlsBtnMain">Controls</button>
+        <button id="scoreboardBtn">Scoreboard</button> <!-- Placeholder -->
+        <button id="toggleDevModeBtn" style="font-size: 1em; padding: 8px 15px; min-width: 150px; margin-top: 20px;">Toggle Dev Mode</button> <!-- Added Dev Mode Button -->
+    </div>
+
+    <div id="controlsMenu" class="menu-overlay hidden">
+        <div id="controlsContent">
+            <h2>Controls</h2>
+            <div class="controls-section">
+                <p>Move: WASD or Arrow Keys</p>
+                <p>Turn towards cursor/touch direction</p>
+            </div>
+            <div class="controls-section">
+                <p>Pause/Resume: Space Bar</p>
+                <p>Pause Menu: Escape (Esc)</p>
+            </div>
+            <button id="backToMainBtnControls">Back</button>
+        </div>
+    </div>
+
+    <div id="pauseMenu" class="menu-overlay hidden">
+        <h2>Paused</h2>
+        <!-- In-game leaderboard -->
+        <div id="pauseLeaderboard">
+            <h3>Leaderboard</h3>
+            <ol id="pauseLeaderboardList">
+                <!-- Scores populated by JS -->
+                <!-- Example: <li><span class="leaderboard-name player-score">Player</span><span class="leaderboard-score player-score">500</span></li> -->
+                <!-- Example: <li><span class="leaderboard-name">AI Name</span><span class="leaderboard-score">120</span></li> -->
+            </ol>
+        </div>
+        <button id="resumeGameBtn">Resume Game</button>
+        <button id="newGameBtnPause">New Game</button>
+        <button id="controlsBtnPause">Controls</button>
+    </div>
+
+    <div id="gameOverMenu" class="menu-overlay hidden">
+        <h2>Game Over</h2>
+        <div id="finalScore" class="score">Score: 0</div>
+        <button id="mainMenuBtnGameOver">Main Menu</button>
+    </div>
+    <!-- End UI Menus -->
+
+    <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    /* Base Options: */
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "target": "ESNext",
+    "allowJs": false,
+    "resolveJsonModule": true,
+    "moduleDetection": "force",
+    "isolatedModules": true,
+
+    /* Strictness */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+
+    /* If NOT transpiling with TypeScript: */
+    "module": "ESNext",
+    "noEmit": true,
+
+    /* If your code runs in the DOM: */
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+
+    /* Module Resolution Options */
+    "moduleResolution": "bundler"
+    // "baseUrl": ".",
+    // "paths": {},
+
+    /* Source Map Options */
+    // "sourceMap": true,
+    // "outDir": "./dist",
+    // "rootDir": "./src",
+
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
