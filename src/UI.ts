@@ -8,7 +8,8 @@ export type UIAction =
     | 'newGameFromPause'
     | 'newGameFromGameOver'
     // | 'showScoreboard' // Placeholder for original scoreboard button if needed
-    | 'toggleDevMode';
+    | 'toggleDevMode'
+    | 'togglePause'; // Action for the new pause button
 
 // Callback type for UI actions
 export type UIActionCallback = (action: UIAction) => void;
@@ -22,6 +23,7 @@ private gameOverMenu: HTMLElement | null = null;
 private loadingScreen: HTMLElement | null = null; // Keep track of loading screen
 private pauseLeaderboardList: HTMLElement | null = null; // Added for in-game leaderboard
 private inGameMiniBoard: HTMLElement | null = null;
+private pauseButton: HTMLButtonElement | null = null; // Reference to the new pause button
 
     // Score Display
     private finalScoreElement: HTMLElement | null = null;
@@ -43,10 +45,11 @@ private inGameMiniBoard: HTMLElement | null = null;
 this.finalScoreElement = document.getElementById('finalScore');
 this.pauseLeaderboardList = document.getElementById('pauseLeaderboardList'); // Get pause leaderboard list
 this.inGameMiniBoard = document.getElementById('inGameLeaderboard');
+this.pauseButton = document.getElementById('pause-button') as HTMLButtonElement; // Get the pause button
 
         // Basic validation
-if (!this.mainMenu || !this.controlsMenu || !this.pauseMenu || !this.gameOverMenu || !this.loadingScreen || !this.finalScoreElement || !this.pauseLeaderboardList) {
-console.error('UIManager: Failed to find one or more required UI elements!');
+if (!this.mainMenu || !this.controlsMenu || !this.pauseMenu || !this.gameOverMenu || !this.loadingScreen || !this.finalScoreElement || !this.pauseLeaderboardList || !this.pauseButton) {
+console.error('UIManager: Failed to find one or more required UI elements (including pause-button)!');
 // Don't return here, just warn about missing mini-board if applicable
 // return;
 }
@@ -73,6 +76,10 @@ if (!this.inGameMiniBoard) console.warn('#inGameLeaderboard missing');
 
         // Game Over Menu Buttons
         this.attachListener('mainMenuBtnGameOver', () => this.actionCallback('newGameFromGameOver')); // Or could be 'showMainMenu'
+
+        // New Pause Button Listener
+        this.attachListener('pause-button', () => this.actionCallback('togglePause'));
+
 
         console.log('UIManager initialized.');
         // Initially, ensure only the main menu might be visible (or none if loading)
@@ -185,6 +192,16 @@ div.textContent=`${e.name}  ${e.score}`;
 this.inGameMiniBoard!.appendChild(div);
 });
 }
+
+    // --- Pause Button Update ---
+    updatePauseButton(isPaused: boolean): void {
+        if (this.pauseButton) {
+            // Use Unicode characters for pause (❚❚) and play (►)
+            this.pauseButton.textContent = isPaused ? '►' : '❚❚';
+            // Optional: Change style/tooltip based on state
+            this.pauseButton.title = isPaused ? 'Resume Game' : 'Pause Game';
+        }
+    }
 
 }
 

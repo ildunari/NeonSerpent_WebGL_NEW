@@ -50,7 +50,10 @@ export function resolveCollisions(
 
             // Check collision against victim's body segments (skip neck)
             const victimRad = segRadius(victim.length);
-            const skipCount = (victim instanceof PlayerSerpent || victim instanceof AISerpent) ? victim.calculateSkipSegments() : 6; // Use method if available
+            // Determine skipCount based on victim type
+            const skipCount = (victim instanceof PlayerSerpent)
+                                ? victim.calculateSkipSegments() // Player uses its method
+                                : 6; // AI uses a fixed skip count
 
             for (let idx = skipCount; idx < victim.segs.length; idx++) {
                 const seg = victim.segs[idx];

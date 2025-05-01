@@ -19,7 +19,11 @@ import {
     PLAYER_INITIAL_LENGTH, // Import initial length for orb sizing
     ORB_BASE_RADIUS,       // Import new orb sizing constants
     ORB_RADIUS_MULTIPLIER,
-    SnakeState // Added missing import
+    SnakeState, // Added missing import
+    // Import effect constants for absorption feedback
+    PLAYER_EAT_GLOW_FRAMES,
+    PLAYER_EAT_SPEED_BOOST,
+    PLAYER_EAT_SPEED_BOOST_DURATION_MS
  } from './types';
  import {
      // Import constants from constants.ts
@@ -77,6 +81,7 @@ private worldHeight: number = 1000; // Default, will be updated
 private lastMiniBoardUpdate: number = 0;
 private spatialGrid: SpatialHashGrid | null = null; // Added spatial grid member
 private readonly CELL_SIZE = 100; // Define cell size for the grid
+private aiRespawnTimeouts: number[] = []; // Added to track AI respawn timeouts
 // Reusable objects for optimization
 private _reusableKeyboardDir: { x: number, y: number } = { x: 0, y: 0 };
 private _reusableQueryBounds: { x: number, y: number, radius: number } = { x: 0, y: 0, radius: 0 };
@@ -180,6 +185,9 @@ private _reusableQueryBounds: { x: number, y: number, radius: number } = { x: 0,
             //     break;
             case 'toggleDevMode':
                 this.toggleDevMode();
+                break;
+            case 'togglePause': // Added case for the new button
+                this.togglePause();
                 break;
         }
     }
@@ -348,6 +356,7 @@ this.scoreText.visible = true; // Ensure visible
                 this.uiManager.updatePauseLeaderboard([]); // Show empty if no entities
             }
             this.changeState(GameState.PAUSED);
+            this.uiManager.updatePauseButton(true); // Update button to show "Resume" icon
         }
     }
 
@@ -355,6 +364,7 @@ this.scoreText.visible = true; // Ensure visible
         if (this.gameState === GameState.PAUSED || this.gameState === GameState.CONTROLS) {
             this.uiManager.hideControlsMenu(); // Ensure controls are hidden if resuming from there
             this.changeState(GameState.PLAYING);
+            this.uiManager.updatePauseButton(false); // Update button to show "Pause" icon
         }
     }
 
@@ -381,6 +391,16 @@ this.scoreText.visible = true; // Ensure visible
          }
     }
 
+    // Method to toggle pause state via the button
+    private togglePause(): void {
+        if (this.gameState === GameState.PLAYING) {
+            this.pauseGame();
+        } else if (this.gameState === GameState.PAUSED) {
+            this.resumeGame();
+        }
+        // No action if in menu, game over, etc.
+    }
+
      gameOver(): void {
         if (this.gameState === GameState.PLAYING) {
             console.log("Game Over!");
@@ -396,8 +416,12 @@ this.scoreText.visible = true; // Ensure visible
 
     // Helper to remove all game entities and their Pixi objects, and clear the grid
     private cleanupGameEntities(): void {
-        console.log("Cleaning up game entities and spatial grid...");
-        // Clear grid first
+        console.log("Cleaning up game entities, spatial grid, and pending respawns...");
+        // Clear pending AI respawn timeouts first
+        this.aiRespawnTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
+        this.aiRespawnTimeouts = []; // Reset the array
+
+        // Clear grid
         this.spatialGrid?.clear();
         this.spatialGrid = null;
 
@@ -585,11 +609,22 @@ this.scoreText.visible = true; // Ensure visible
     // --- Core Game Loop Methods ---
 
     update(deltaTime: number): void {
+        // Update Dev Info Text regardless of game state if active
+        if (this.devModeActive && this.devInfoText && this.entities?.player) {
+            this.updateDevInfoText();
+            this.devInfoText.visible = true;
+        } else if (this.devInfoText) {
+            this.devInfoText.visible = false;
+        }
+
         // Game logic update only happens when PLAYING
-        if (this.gameState !== GameState.PLAYING || !this.entities) { // Ensure entities exist
+        if (this.gameState !== GameState.PLAYING || !this.entities) {
+            // Still update camera and parallax even if paused, to allow looking around?
+            // Or maybe only update if paused? Let's keep it simple for now: only update if PLAYING.
             return;
         }
 
+        // --- START of PLAYING state logic ---
         // Get entities for easier access
         const { player, ai, orbs } = this.entities;
         const now = performance.now(); // Get current time once
@@ -601,14 +636,14 @@ this.scoreText.visible = true; // Ensure visible
         if (this.spatialGrid) { // Keep the block check for insertions
             // Insert Player
             if (player.visible) {
-                const playerRadius = segRadius(player.length);
-                // Insert head
-                this.spatialGrid?.insert(player, { x: player.segs[0].x, y: player.segs[0].y, radius: playerRadius });
-                // Insert relevant body segments (skip neck)
-                const skipCount = player.calculateSkipSegments();
-                for (let i = skipCount; i < player.segs.length; i++) {
-                    // Store the player object itself for segments, maybe add index later if needed
-                    this.spatialGrid?.insert(player, { x: player.segs[i].x, y: player.segs[i].y, radius: playerRadius });
+                    const playerRadius = segRadius(player.length);
+                    // Insert head
+                    this.spatialGrid?.insert(player, { x: player.segs[0].x, y: player.segs[0].y, radius: playerRadius }); // Add optional chaining
+                    // Insert relevant body segments (skip neck)
+                    const skipCount = player.calculateSkipSegments(); // Player has this method
+                    for (let i = skipCount; i < player.segs.length; i++) {
+                        // Store the player object itself for segments, maybe add index later if needed
+                        this.spatialGrid?.insert(player, { x: player.segs[i].x, y: player.segs[i].y, radius: playerRadius }); // Add optional chaining
                 }
             }
 
@@ -617,11 +652,11 @@ this.scoreText.visible = true; // Ensure visible
                 if (s.visible) {
                     const aiRadius = segRadius(s.length);
                     // Insert head
-                    this.spatialGrid?.insert(s, { x: s.segs[0].x, y: s.segs[0].y, radius: aiRadius });
+                    this.spatialGrid?.insert(s, { x: s.segs[0].x, y: s.segs[0].y, radius: aiRadius }); // Add optional chaining
                     // Insert relevant body segments (skip neck)
-                    const skipCount = s.calculateSkipSegments();
+                    const skipCount = 6; // Use a fixed skip count for AI grid insertion
                     for (let i = skipCount; i < s.segs.length; i++) {
-                        this.spatialGrid?.insert(s, { x: s.segs[i].x, y: s.segs[i].y, radius: aiRadius });
+                        this.spatialGrid?.insert(s, { x: s.segs[i].x, y: s.segs[i].y, radius: aiRadius }); // Add optional chaining
                     }
                 }
             });
@@ -671,8 +706,12 @@ this.scoreText.visible = true; // Ensure visible
         // --- AI Update & Sync ---
         ai.forEach(s => {
             if (!s.visible) return; // Skip dead AI
-            s.updateAI(deltaTime, now, orbs, this.entities.getAllSnakes(), this.worldWidth, this.worldHeight);
-            s.syncPixi(s.calculateSkipSegments(), this.worldWidth, this.worldHeight);
+            // 1. Call AI-specific logic (decision making, turning)
+            s.updateAI(now, orbs, this.entities.getAllSnakes(), this.worldWidth, this.worldHeight);
+            // 2. Call the base update method for physics (movement, growth, etc.)
+            s.update(deltaTime, this.worldWidth, this.worldHeight);
+            // 3. Sync graphics (AI uses base syncPixi which doesn't need skip count, pass 0)
+            s.syncPixi(0, this.worldWidth, this.worldHeight);
         });
 
         // ---- AI eats orbs ---- // Refactored to use spatial grid
@@ -693,7 +732,9 @@ this.scoreText.visible = true; // Ensure visible
                     if (entity instanceof Orb && entity.visible) {
                         const orb = entity;
                         if (dist(head, orb) < botRad + orb.radius) {
-                            bot.eatOrb(orb.value);
+                            // AI uses the base eatOrb, pass orbValue and simple growthAmount
+                            const growthAmount = orb.value; // AI growth = orb value
+                            bot.eatOrb(orb.value, growthAmount);
                             orb.visible = false;
                             orb.destroyPixi();
                             orbsToRemoveAI.push(orb);
@@ -706,7 +747,9 @@ this.scoreText.visible = true; // Ensure visible
                     const orb = orbs[k];
                     if (!orb.visible) continue;
                     if (dist(head, orb) < botRad + orb.radius) {
-                        bot.eatOrb(orb.value);
+                        // AI uses the base eatOrb, pass orbValue and simple growthAmount
+                        const growthAmount = orb.value; // AI growth = orb value
+                        bot.eatOrb(orb.value, growthAmount);
                         orb.visible = false;
                         orb.destroyPixi();
                         orbsToRemoveAI.push(orb); // Still collect for removal below
@@ -792,7 +835,8 @@ this.uiManager.updateMiniLeaderboard(scores);
                     if (distance < collisionThreshold) {
                         // Collision detected!
                         // console.log("Player ate orb!"); // Less verbose
-                        player.score += orb.value;
+                        // Player.eatOrb override handles growth calculation and calls super.
+                        // We only need to pass the original orbValue here.
                         player.eatOrb(orb.value);
 
                         // Mark orb for removal
@@ -815,13 +859,14 @@ this.uiManager.updateMiniLeaderboard(scores);
                 const collisionThreshold = playerRadius + orb.radius;
 
                 if (distance < collisionThreshold) {
-                    // Collision detected!
-                    // console.log("Player ate orb!"); // Less verbose
-                    player.score += orb.value;
-                    player.eatOrb(orb.value);
+                        // Collision detected!
+                        // console.log("Player ate orb!"); // Less verbose
+                        // Player.eatOrb override handles growth calculation and calls super.
+                        // We only need to pass the original orbValue here.
+                        player.eatOrb(orb.value);
 
-                    // Mark orb for removal, destroy its Pixi object, and remove from manager
-                    orb.visible = false;
+                        // Mark orb for removal, destroy its Pixi object, and remove from manager
+                        orb.visible = false;
                     orb.destroyPixi();
                     this.entities.removeOrb(orb); // Use EntityManager method
                 }
@@ -968,15 +1013,24 @@ this.uiManager.updateMiniLeaderboard(scores);
         const aiToRemove = this.entities.ai.find(aiSnake => aiSnake.id === s.id);
         if (aiToRemove) {
             this.entities.removeAISerpent(aiToRemove);
-            // ✅  respawn replacement after 3 s
-            setTimeout(()=>{
-                // Check if entities still exist (game might have ended/restarted)
-                if (this.entities) {
+            // ✅  respawn replacement after 3 s, storing timeout ID
+            // Cast setTimeout result to number for browser environment compatibility
+            const timeoutId = setTimeout(() => {
+                // Check if entities still exist AND game is still playing
+                if (this.entities && this.gameState === GameState.PLAYING) {
                     console.log(`Respawning AI after snake ${s.id} was killed.`);
                     // Need to call spawnSingleAI on the instance, not the class
                     this.entities.spawnSingleAI(this.worldWidth, this.worldHeight); // Call the new method
+                    // Remove this timeout ID from the list once executed successfully
+                    this.aiRespawnTimeouts = this.aiRespawnTimeouts.filter(id => id !== timeoutId);
+                } else {
+                    console.log(`Skipping AI respawn for ${s.id} due to game state change or missing entities.`);
+                    // Also remove from list if skipped
+                    // Ensure comparison is number vs number
+                    this.aiRespawnTimeouts = this.aiRespawnTimeouts.filter(id => id !== timeoutId as unknown as number);
                 }
-             }, 3000);
+            }, 3000) as unknown as number; // Cast the timeoutId itself
+            this.aiRespawnTimeouts.push(timeoutId); // Store the timeout ID (already cast)
         } else {
             console.warn(`Could not find AI serpent with ID ${s.id} to remove.`);
         }
@@ -1007,8 +1061,13 @@ this.uiManager.updateMiniLeaderboard(scores);
         winner.segs.push(...loser.segs.slice(6));
     }
     // Winner's graphics will update automatically based on new segs array in syncPixi
- }
 
+    // --- Add Absorption Effects ---
+    // TODO: Consider creating specific absorption effect constants later
+    winner.glowFrames = PLAYER_EAT_GLOW_FRAMES * 2; // Longer glow for absorption
+    winner.speed = winner.baseSpeed * PLAYER_EAT_SPEED_BOOST; // Apply speed boost
+    winner.speedBoostTimer = (PLAYER_EAT_SPEED_BOOST_DURATION_MS / 1000) * 1.5; // Longer boost duration
+ }
 
     // --- KeyDown Handler --- Added to satisfy main.ts
     public handleKeyDown(event: KeyboardEvent): void {
@@ -1024,17 +1083,10 @@ this.uiManager.updateMiniLeaderboard(scores);
                 }
                 break;
 
-            case ' ': // Space bar
-                event.preventDefault(); // Prevent page scroll
-                if (this.gameState === GameState.PLAYING) {
-                    this.pauseGame();
-                } else if (this.gameState === GameState.PAUSED) {
-                    this.resumeGame();
-                } else if (this.gameState === GameState.GAME_OVER) {
-                    this.returnToMenu(); // Space on game over goes to menu
-                }
-                // No action for space on main menu or controls for now
-                break;
+            // case ' ': // Space bar - Functionality removed, will be used for firing later
+            //     event.preventDefault();
+            //     // Fire action will be handled in the update loop via inputHandler.isFireButtonPressed()
+            //     break;
         }
         // Note: Movement keys (WASD/Arrows) are handled by InputHandler polling in the update loop
     }

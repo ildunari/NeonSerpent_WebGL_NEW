@@ -26,6 +26,7 @@ class InputHandler {
     private moveDown: boolean = false;
     private moveLeft: boolean = false;
     private moveRight: boolean = false;
+    private isFiring: boolean = false; // State for the fire button
 
     // Reusable objects to minimize allocation
     private _keyboardDirection: Point = { x: 0, y: 0 };
@@ -143,6 +144,8 @@ class InputHandler {
         this.handleTouchStart = this.handleTouchStart.bind(this);
         this.handleTouchMove = this.handleTouchMove.bind(this);
         this.handleTouchEnd = this.handleTouchEnd.bind(this);
+        this.handleFireButtonDown = this.handleFireButtonDown.bind(this); // Bind fire button handlers
+        this.handleFireButtonUp = this.handleFireButtonUp.bind(this);
 
         // Add keyboard listeners
         window.addEventListener('keydown', this.handleKeyDown);
@@ -152,6 +155,19 @@ class InputHandler {
         this.canvas.addEventListener('touchmove', this.handleTouchMove, { passive: false });
         this.canvas.addEventListener('touchend', this.handleTouchEnd);
         this.canvas.addEventListener('touchcancel', this.handleTouchEnd); // Treat cancel like end
+
+        // Add listeners for the fire button
+        const fireButton = document.getElementById('fire-button');
+        if (fireButton) {
+            // Use touch events for mobile, but also mouse events as fallback/desktop testing
+            fireButton.addEventListener('touchstart', this.handleFireButtonDown, { passive: false });
+            fireButton.addEventListener('touchend', this.handleFireButtonUp);
+            fireButton.addEventListener('touchcancel', this.handleFireButtonUp);
+            fireButton.addEventListener('mousedown', this.handleFireButtonDown); // Fallback
+            window.addEventListener('mouseup', this.handleFireButtonUp); // Listen on window for mouseup
+        } else {
+            console.warn('InputHandler: Fire button element (#fire-button) not found.');
+        }
     }
 
     removeEventListeners(): void {
@@ -164,6 +180,16 @@ class InputHandler {
         this.canvas.removeEventListener('touchmove', this.handleTouchMove);
         this.canvas.removeEventListener('touchend', this.handleTouchEnd);
         this.canvas.removeEventListener('touchcancel', this.handleTouchEnd);
+
+        // Remove listeners for the fire button
+        const fireButton = document.getElementById('fire-button');
+        if (fireButton) {
+            fireButton.removeEventListener('touchstart', this.handleFireButtonDown);
+            fireButton.removeEventListener('touchend', this.handleFireButtonUp);
+            fireButton.removeEventListener('touchcancel', this.handleFireButtonUp);
+            fireButton.removeEventListener('mousedown', this.handleFireButtonDown);
+            window.removeEventListener('mouseup', this.handleFireButtonUp);
+        }
     }
 
     // Keyboard event handlers
@@ -193,6 +219,10 @@ class InputHandler {
             case 'ArrowRight':
                 this.moveRight = true;
                 break;
+            // Space bar will be handled separately for firing later
+            // case ' ':
+            //     this.isFiring = true; // Example if space also fires
+            //     break;
         }
         // Store generic key state if needed elsewhere
         // this.keys[event.key] = true;
@@ -216,6 +246,9 @@ class InputHandler {
             case 'ArrowRight':
                 this.moveRight = false;
                 break;
+            // case ' ':
+            //     this.isFiring = false; // Example if space also fires
+            //     break;
         }
          // Store generic key state if needed elsewhere
         // delete this.keys[event.key];
@@ -287,6 +320,19 @@ class InputHandler {
          }
     }
 
+    // --- Fire Button Handlers ---
+    private handleFireButtonDown(event: TouchEvent | MouseEvent): void {
+        event.preventDefault(); // Prevent potential double actions or page scroll
+        this.isFiring = true;
+        // console.log("Fire button pressed"); // Optional debug log
+    }
+
+    private handleFireButtonUp(): void {
+        // No event needed here as touchend/mouseup don't carry useful info for just stopping
+        this.isFiring = false;
+        // console.log("Fire button released"); // Optional debug log
+    }
+
     // Method to get the desired movement direction from keyboard
     // Returns a non-normalized vector, or {x: 0, y: 0} if no direction keys are pressed
     getKeyboardDirection(): Point {
@@ -311,6 +357,12 @@ class InputHandler {
         return (this.joystick.active && (this.joystick.vector.x !== 0 || this.joystick.vector.y !== 0))
             ? this.joystick.vector
             : this._zeroDirection;
+    }
+
+    // Method to check if the fire action is currently active
+    isFireButtonPressed(): boolean {
+        // For now, just returns the state. Later, might check keyboard too.
+        return this.isFiring;
     }
 
     // Method to get current input state (optional, maybe remove if not needed)
