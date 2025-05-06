@@ -1,4 +1,3 @@
-import * as PIXI from 'pixi.js'; // Need PIXI for graphics override
 import { Serpent } from './Serpent'; // Import the base class
 import AIController from './AIController';
 import {
