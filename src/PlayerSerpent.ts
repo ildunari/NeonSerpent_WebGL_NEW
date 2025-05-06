@@ -225,42 +225,26 @@ export class PlayerSerpent extends Serpent {
                 graphics.fill({ color: basePlayerGlowColor, alpha: baseGlowAlpha * headGrowth }); graphics.circle(headSeg.x, headSeg.y, currentHeadGlowRadius); // Use scaled glow alpha
                 // 3. Head Fill
                 graphics.fill({ color: headColor, alpha: currentHeadAlpha }); graphics.circle(headSeg.x, headSeg.y, currentHeadRadius); // Use scaled head alpha
+
+                // Define eye properties (some used by mouth if it were dynamic, good to have them defined)
+                const eyeAngle = Math.atan2(this.velocity.vy, this.velocity.vx); // Still useful for eye positioning
+                const eyeFillColor = 0x000000;
+                const eyeFillAlpha = 0.9 * headGrowth;
+
                 // --- Draw Eyes (Scaled by headGrowth) ---
                 const finalEyeRadius = Math.max(1, currentHeadRadius * 0.2); // Base size on current head radius, min 1px
                 const eyeDist = currentHeadRadius * 0.5; // Eye distance scales with head radius
-                const eyeAngle = Math.atan2(this.velocity.vy, this.velocity.vx);
                 const eyeAnglePerp = eyeAngle + Math.PI / 2;
                 const eye1X = headSeg.x + Math.cos(eyeAnglePerp) * eyeDist; const eye1Y = headSeg.y + Math.sin(eyeAnglePerp) * eyeDist;
                 const eye2X = headSeg.x - Math.cos(eyeAnglePerp) * eyeDist; const eye2Y = headSeg.y - Math.sin(eyeAnglePerp) * eyeDist;
                 const eyeGlowColor = 0xffffff;
                 const eyeGlowAlpha = 0.15 * headGrowth; // Scale eye glow alpha
                 const eyeGlowRadius = finalEyeRadius + Math.max(0.5, 2 * headGrowth); // Scale eye glow addition
-                const eyeFillColor = 0x000000;
-                const eyeFillAlpha = 0.9 * headGrowth; // Scale eye fill alpha
+
                 // Eye Glow (Fill)
                 graphics.fill({ color: eyeGlowColor, alpha: eyeGlowAlpha }); graphics.circle(eye1X, eye1Y, eyeGlowRadius); graphics.circle(eye2X, eye2Y, eyeGlowRadius);
                 // Eye Fill
-                // Eye Fill
                 graphics.fill({ color: eyeFillColor, alpha: eyeFillAlpha }); graphics.circle(eye1X, eye1Y, finalEyeRadius); graphics.circle(eye2X, eye2Y, finalEyeRadius);
-
-                // --- Draw Mouth (Player Only) ---
-                if (this.isPlayer) { // Check if this instance is the player
-                    const mouthRadius = currentHeadRadius * 0.6; // Position mouth relative to head center
-                    const mouthAngleOffset = Math.PI * 0.8; // How wide the mouth arc is (less than PI)
-                    const mouthStartX = headSeg.x + Math.cos(eyeAngle - mouthAngleOffset / 2) * mouthRadius;
-                    const mouthStartY = headSeg.y + Math.sin(eyeAngle - mouthAngleOffset / 2) * mouthRadius;
-                    const mouthEndX = headSeg.x + Math.cos(eyeAngle + mouthAngleOffset / 2) * mouthRadius;
-                    const mouthEndY = headSeg.y + Math.sin(eyeAngle + mouthAngleOffset / 2) * mouthRadius;
-                    const mouthControlX = headSeg.x + Math.cos(eyeAngle) * mouthRadius * 0.8; // Control point slightly forward
-                    const mouthControlY = headSeg.y + Math.sin(eyeAngle) * mouthRadius * 0.8;
-
-                    graphics.setStrokeStyle({ width: Math.max(1, 2 * headGrowth), color: eyeFillColor, alpha: eyeFillAlpha * 0.8 }); // Use setStrokeStyle
-                    graphics.moveTo(mouthStartX, mouthStartY);
-                    // Use quadraticCurveTo for a simple arc shape
-                    graphics.quadraticCurveTo(mouthControlX, mouthControlY, mouthEndX, mouthEndY);
-                    graphics.stroke(); // Apply the stroke for the mouth line
-                }
-                // Removed duplicated mouth variable definitions from here
 
             }
         }

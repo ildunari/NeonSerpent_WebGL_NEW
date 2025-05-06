@@ -93,12 +93,13 @@ export interface OrbTierConfig {
     value: number;
     color: number; // Hex color
     spawnWeight: number; // Relative probability weight
+    radiusMultiplier: number; // Added to scale orb size by tier
 }
 
 export const ORB_TIER_CONFIG: Record<OrbTier, OrbTierConfig> = {
-    [OrbTier.LOW]: { value: 1, color: 0x8888FF, spawnWeight: 6 }, // Light Blue, 60%
-    [OrbTier.MID]: { value: 3, color: 0xFF88FF, spawnWeight: 3 }, // Pink, 30%
-    [OrbTier.HIGH]: { value: 5, color: 0xFFFF88, spawnWeight: 1 }, // Light Yellow, 10%
+    [OrbTier.LOW]: { value: 1, color: 0x8888FF, spawnWeight: 6, radiusMultiplier: 1.0 }, // Light Blue, 60%
+    [OrbTier.MID]: { value: 3, color: 0xFF88FF, spawnWeight: 3, radiusMultiplier: 1.5 }, // Pink, 30%
+    [OrbTier.HIGH]: { value: 5, color: 0xFFFF88, spawnWeight: 1, radiusMultiplier: 2.0 }, // Light Yellow, 10%
 };
 
 // Calculate total weight for weighted random selection

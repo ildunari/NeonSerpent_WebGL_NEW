@@ -39,15 +39,15 @@ export class Orb {
         }
 
         // Set scale mode for crisp pixels (optional polish)
-        texture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST;
+        texture.source.scaleMode = 'nearest'; // Updated to use Texture.source and string value
 
         this.pixiSprite = new PIXI.Sprite(texture);
         this.pixiSprite.anchor.set(0.5); // Center the anchor
 
-        // Set initial size based on the provided radius (diameter = radius * 2)
-        // This radius comes from generateOrbs and is calculated using ORB_BASE_RADIUS/ORB_RADIUS_MULTIPLIER
-        this.pixiSprite.width = this.radius * 2;
-        this.pixiSprite.height = this.radius * 2;
+        // Set initial size based on the provided radius and tier's radiusMultiplier
+        const tierRadiusMultiplier = ORB_TIER_CONFIG[this.tier].radiusMultiplier;
+        this.pixiSprite.width = this.radius * 2 * tierRadiusMultiplier;
+        this.pixiSprite.height = this.radius * 2 * tierRadiusMultiplier;
 
         // Set initial position and visibility
         this.pixiSprite.position.set(this.x, this.y);
@@ -64,7 +64,7 @@ export class Orb {
         // Update visibility first
         this.pixiSprite.visible = this.visible;
 
-        if (this.visible) {
+        if (this.visible) { // Corrected syntax: added parentheses
             // Update position if visible
             this.pixiSprite.position.set(this.x, this.y);
             // Update size if needed (e.g., if player segment size changes dynamically)
