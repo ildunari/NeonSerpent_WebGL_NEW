@@ -85,6 +85,8 @@ private aiRespawnTimeouts: number[] = []; // Added to track AI respawn timeouts
 // Reusable objects for optimization
 private _reusableKeyboardDir: { x: number, y: number } = { x: 0, y: 0 };
 private _reusableQueryBounds: { x: number, y: number, radius: number } = { x: 0, y: 0, radius: 0 };
+    private bullets: { graphics: PIXI.Graphics; vx: number; vy: number; life: number }[] = [];
+    private lastFireState: boolean = false;
 
     constructor(pixiApp: PIXI.Application, inputHandler: InputHandler, backgroundVideo: HTMLVideoElement) {
         console.log('Game constructor called');
@@ -787,7 +789,59 @@ const scores = this.entities.getAllSnakes()
 this.uiManager.updateMiniLeaderboard(scores);
 }
 
-// --- Update Dev Info Display ---
+        // --- Bullet Firing and Movement ---
+        // Handle firing input (space or fire button)
+        const firing = this.inputHandler.isFireButtonPressed();
+        if (firing && !this.lastFireState) {
+            // Spawn a new plasma bullet from the player's mouth/head
+            const head = player.segs[0];
+            const dirX = player.velocity.vx;
+            const dirY = player.velocity.vy;
+            const headRadius = segRadius(player.length) * 1.2 * (head.growthProgress ?? 1.0);
+            const bulletX = head.x + dirX * headRadius;
+            const bulletY = head.y + dirY * headRadius;
+            const bulletSpeed = 150; // bullet speed in pixels per second
+            const bulletVX = dirX * bulletSpeed;
+            const bulletVY = dirY * bulletSpeed;
+            // Create bullet graphics (glowing circle)
+            const bulletGraphics = new PIXI.Graphics();
+            // Draw glow (semi-transparent larger circle)
+            bulletGraphics.beginFill(0xFF00FF, 0.3);
+            bulletGraphics.drawCircle(0, 0, 6);
+            bulletGraphics.endFill();
+            // Draw core (solid smaller circle)
+            bulletGraphics.beginFill(0xFF00FF, 1.0);
+            bulletGraphics.drawCircle(0, 0, 3);
+            bulletGraphics.endFill();
+            bulletGraphics.position.set(bulletX, bulletY);
+            this.gameContainer.addChild(bulletGraphics);
+            // Track the bullet
+            this.bullets.push({ graphics: bulletGraphics, vx: bulletVX, vy: bulletVY, life: 3.0 }); // 3 seconds lifetime
+        }
+        this.lastFireState = firing;
+
+        // Update existing bullets
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+            const bullet = this.bullets[i];
+            // Move bullet based on its velocity
+            bullet.graphics.x += bullet.vx * deltaTime;
+            bullet.graphics.y += bullet.vy * deltaTime;
+            // Decrease remaining life
+            bullet.life -= deltaTime;
+            // Check removal conditions
+            if (bullet.life <= 0) {
+                // Remove and destroy bullet
+                bullet.graphics.parent?.removeChild(bullet.graphics);
+                bullet.graphics.destroy();
+                this.bullets.splice(i, 1);
+            } else {
+                // (Placeholder for collision detection)
+                // TODO: Check collisions of bullet with snakes or orbs.
+                // e.g., if (dist(bullet.graphics, someTarget) < collisionRadius) { handle hit and remove bullet }
+            }
+        }
+
+        // --- Update Dev Info Display ---
         // Ensure player exists before accessing properties for dev info
         if (this.devModeActive && this.devInfoText && player) {
             this.updateDevInfoText();

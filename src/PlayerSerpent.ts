@@ -1,7 +1,6 @@
 // src/PlayerSerpent.ts
-
-// PIXI import removed as PIXI.Graphics is inherited via Serpent
-import { Serpent } from './Serpent'; // Import the base class
+import * as PIXI from 'pixi.js'; // Import PixiJS for Graphics
+import { Serpent } from './Serpent';
 import {
     Point,
     // Segment, // Type hint not needed locally anymore
@@ -29,10 +28,13 @@ import { dist, lerpColor } from './utils'; // Removed unused wrap, moveTowardsTo
 
 export class PlayerSerpent extends Serpent {
     // Inherited properties are handled by the base class 'Serpent'
-
     // Note: Access modifiers for inherited properties like lastTurnTimestamp and segmentGrowthDuration
-    // might need adjustment in the base Serpent class (e.g., to protected) if PlayerSerpent needs direct access.
+    // might need adjustment in the base Serpent class if PlayerSerpent needs direct access.
     // For now, assuming they are accessible or logic is adjusted.
+
+    // Graphics for player-specific visuals
+    private mouthGraphics!: PIXI.Graphics;
+    private eyeGraphics!: PIXI.Graphics;
 
     constructor(startX: number, startY: number) {
         // Call the Serpent constructor with player-specific defaults
@@ -50,11 +52,31 @@ export class PlayerSerpent extends Serpent {
         console.log(`PlayerSerpent constructor finished for ID: ${this.id}`);
     }
 
-    // initPixi and destroyPixi are inherited from Serpent.
-    // We keep the player-specific syncPixi override.
+    // Override initPixi to add separate eye and mouth graphics for the player
+    override initPixi(stage: PIXI.Container): void {
+        super.initPixi(stage);
+        // Create separate graphics for mouth and eyes and add to stage (game container)
+        this.mouthGraphics = new PIXI.Graphics();
+        this.eyeGraphics = new PIXI.Graphics();
+        stage.addChild(this.mouthGraphics);
+        stage.addChild(this.eyeGraphics);
+    }
+
+    // Override destroyPixi to clean up mouth and eye graphics
+    override destroyPixi(): void {
+        super.destroyPixi();
+        if (this.mouthGraphics) {
+            this.mouthGraphics.parent?.removeChild(this.mouthGraphics);
+            this.mouthGraphics.destroy();
+        }
+        if (this.eyeGraphics) {
+            this.eyeGraphics.parent?.removeChild(this.eyeGraphics);
+            this.eyeGraphics.destroy();
+        }
+    }
 
     /**
-     * syncPixi - Player-specific rendering with advanced effects (pulse, glow, safe neck, mouth).
+     * syncPixi - Player-specific rendering with advanced effects (glow, pulse, safe neck, mouth).
      * This completely overrides the base Serpent.syncPixi rendering.
      */
     override syncPixi(playerSkipCount: number, worldWidth: number, worldHeight: number): void {
@@ -62,15 +84,19 @@ export class PlayerSerpent extends Serpent {
         this.pixiObject.visible = this.visible;
         if (!this.visible || this.segs.length === 0) {
             this.pixiObject.clear();
+            // Also hide mouth and eyes when not visible
+            this.mouthGraphics.visible = false;
+            this.eyeGraphics.visible = false;
             return;
         }
+        this.mouthGraphics.visible = true;
+        this.eyeGraphics.visible = true;
 
-        const graphics = this.pixiObject;
+        const graphics = this.pixiObject as PIXI.Graphics;
         graphics.clear();
 
         // 1. Setup Constants
         const radius = segRadius(this.length);
-        // const bodyWidth = radius * 2; // Unused variable removed
         const headRadius = radius * 1.2;
         const baseHexColor = this.color;
         const baseAlpha = 1.0;
@@ -78,26 +104,23 @@ export class PlayerSerpent extends Serpent {
         const basePlayerGlowColor = 0xFFFF00; // Yellow base glow
         let basePlayerGlowStrength = 9; // Base strength, will be made dynamic
         const baseGlowAlpha = 0.25;
-        const safeNeckColor = 0x0099aa; // Cyan-ish
+        const safeNeckColor = 0x0099aa; // Cyan-ish for safe neck segments
         const safeNeckGlowStrength = 3;
-        const safeNeckTransitionSegments = 3; // How many segments to transition color over
-        const pulseColor = 0xffffff; // Body color during pulse
-        const pulseGlowColor = 0xffffff; // Glow color during pulse (changed from base yellow)
+        const safeNeckTransitionSegments = 3;
+        const pulseColor = 0xffffff;
+        const pulseGlowColor = 0xffffff;
         const pulseGlowBoost = 4;
         const pulseWidthMultiplier = 0.5;
-        const secondaryPulseWidthFactor = 2.0; // How much wider the secondary pulse is
-        const secondaryPulseGlowAlpha = 0.05; // Alpha for the secondary pulse glow
-        const secondaryPulseGlowBoost = 2; // Extra radius for secondary pulse
+        const secondaryPulseWidthFactor = 2.0;
+        const secondaryPulseGlowAlpha = 0.05;
+        const secondaryPulseGlowBoost = 2;
 
-        // --- Dynamic Glow Strength based on Speed ---
+        // Dynamic Glow Strength based on Speed
         const speedRatio = this.baseSpeed > 0 ? this.speed / this.baseSpeed : 1;
-        // Apply a modest boost/reduction based on speed ratio, clamped
         const dynamicGlowFactor = Math.max(0.8, Math.min(1.5, 1 + (speedRatio - 1) * 0.3));
         const dynamicPlayerGlowStrength = basePlayerGlowStrength * dynamicGlowFactor;
 
-        // 2. Global Line Style Defaults (Not needed for circle fills)
-
-        // 3. --- Draw Body Segments as Circles (excluding head) ---
+        // 2. Draw Body Segments as Circles (excluding head)
         // Calculate cumulative distances for pulse and transition effects
         let cumulativeDistances: number[] = [0];
         let currentTotalDistance = 0;
@@ -108,160 +131,163 @@ export class PlayerSerpent extends Serpent {
             if (!wrapDist) {
                 currentTotalDistance += dist(segA, segB);
             }
-            cumulativeDistances.push(currentTotalDistance); // Store distance *to* segment i+1
+            cumulativeDistances.push(currentTotalDistance);
         }
 
-        // Draw segments from tail towards head (excluding head itself, index 0)
-        // This layering ensures segments closer to the head draw on top
+        // Draw from tail to head (excluding head index 0) so closer segments overlay farther ones
         for (let i = this.segs.length - 1; i >= 1; i--) {
             const seg = this.segs[i];
-            const scaleFactor = seg.growthProgress ?? 1.0; // Use growthProgress for smooth scaling (0 to 1)
-            const segmentMidpointDistance = cumulativeDistances[i]; // Use pre-calculated distance
+            const scaleFactor = seg.growthProgress ?? 1.0;
+            const segmentMidpointDistance = cumulativeDistances[i];
 
-            // --- Calculate Swell Factors ---
+            // Calculate pulse swell factors
             let primarySwellFactor = 0;
             let secondarySwellFactor = 0;
             const primaryPulseWaveWidth = segRadius(this.length) * 8;
             const secondaryPulseWaveWidth = primaryPulseWaveWidth * secondaryPulseWidthFactor;
-
             for (const pulse of this.eatQueue) {
                 const distFromPulseCenter = Math.abs(segmentMidpointDistance - pulse.distanceTraveled);
-                // Primary Pulse
                 if (distFromPulseCenter < primaryPulseWaveWidth / 2) {
-                    primarySwellFactor = Math.max(primarySwellFactor, Math.cos(distFromPulseCenter / (primaryPulseWaveWidth / 2) * (Math.PI / 2)));
+                    primarySwellFactor = Math.max(primarySwellFactor,
+                        Math.cos(distFromPulseCenter / (primaryPulseWaveWidth / 2) * (Math.PI / 2)));
                 }
-                // Secondary Pulse
                 if (distFromPulseCenter < secondaryPulseWaveWidth / 2) {
-                    secondarySwellFactor = Math.max(secondarySwellFactor, Math.cos(distFromPulseCenter / (secondaryPulseWaveWidth / 2) * (Math.PI / 2)));
+                    secondarySwellFactor = Math.max(secondarySwellFactor,
+                        Math.cos(distFromPulseCenter / (secondaryPulseWaveWidth / 2) * (Math.PI / 2)));
                 }
             }
             const isPulsing = primarySwellFactor > 0.01;
             const isSecondaryPulsing = secondarySwellFactor > 0.01;
 
-            // --- Determine Segment State (Safe, Transitioning, Normal) ---
+            // Determine segment state (safe neck, transitioning, normal)
             const isStrictlySafe = this.isPlayer && playerSkipCount > 0 && i < playerSkipCount;
             const isInTransition = this.isPlayer && playerSkipCount > 0 && i >= playerSkipCount && i < playerSkipCount + safeNeckTransitionSegments;
-            let transitionFactor = 0; // 0 = fully safe, 1 = fully normal color
+            let transitionFactor = 0;
             if (isInTransition) {
                 transitionFactor = (i - playerSkipCount + 1) / safeNeckTransitionSegments;
             } else if (!isStrictlySafe) {
-                transitionFactor = 1; // Fully normal color
+                transitionFactor = 1;
             }
 
-            // --- Base Style Calculation (Considering Transition) ---
-            const normalBodyColor = this.glowFrames > 0 ? 0xffffff : baseHexColor; // White if globally glowing, else base color
-            const normalGlowColor = basePlayerGlowColor; // Base yellow glow
-            const normalGlowStrength = dynamicPlayerGlowStrength; // Use speed-adjusted strength
-
+            // Base colors considering transition
+            const normalBodyColor = this.glowFrames > 0 ? 0xffffff : baseHexColor;
+            const normalGlowColor = basePlayerGlowColor;
+            const normalGlowStrength = dynamicPlayerGlowStrength;
             let baseBodyC = lerpColor(safeNeckColor, normalBodyColor, transitionFactor);
-            let baseGlowC = lerpColor(safeNeckColor, normalGlowColor, transitionFactor); // Glow transitions too
-            let baseGlowS = isStrictlySafe ? safeNeckGlowStrength : normalGlowStrength; // Use safe strength only if strictly safe
+            let baseGlowC = lerpColor(safeNeckColor, normalGlowColor, transitionFactor);
+            let baseGlowS = isStrictlySafe ? safeNeckGlowStrength : normalGlowStrength;
 
-            // --- Apply Pulse Effects (Overrides base styles) ---
-            const actualBodyColor = isPulsing ? pulseColor : baseBodyC; // Pulse overrides body color
-            const actualGlowColor = isPulsing ? pulseGlowColor : baseGlowC; // Pulse overrides glow color
-            const actualGlowStrength = isPulsing ? (baseGlowS + pulseGlowBoost) : baseGlowS; // Pulse boosts strength
+            // Apply pulse overrides
+            const actualBodyColor = isPulsing ? pulseColor : baseBodyC;
+            const actualGlowColor = isPulsing ? pulseGlowColor : baseGlowC;
+            const actualGlowStrength = isPulsing ? (baseGlowS + pulseGlowBoost) : baseGlowS;
 
-            // --- Calculate Radii (Scaled by Growth and Swell) ---
+            // Calculate radii
             const radiusWithSwell = radius * (1 + primarySwellFactor * pulseWidthMultiplier);
-            const currentRadius = radiusWithSwell * scaleFactor; // Apply growth scale factor
-
-            // Ensure outline doesn't disappear completely for small segments
+            const currentRadius = radiusWithSwell * scaleFactor;
             const currentOutlineRadius = currentRadius + Math.max(0.5, 1 * scaleFactor);
-            const currentGlowRadius = currentRadius + (actualGlowStrength / 2) * scaleFactor; // Scale glow addition by growth
-
-            // Secondary pulse radius calculation
+            const currentGlowRadius = currentRadius + (actualGlowStrength / 2) * scaleFactor;
             const secondaryPulseRadiusBoost = (secondaryPulseGlowBoost / 2) * secondarySwellFactor * scaleFactor;
             const currentSecondaryGlowRadius = currentRadius + secondaryPulseRadiusBoost;
+            const currentAlpha = baseAlpha * scaleFactor;
 
-            const currentAlpha = baseAlpha * scaleFactor; // Scale alpha by growth
-
-            // --- Draw Layers (if radius is significant) ---
+            // Draw this segment if visible
             if (currentRadius > 0.1) {
-                // 0. Secondary Pulse Glow (Very Subtle - Draw First)
+                // Secondary pulse glow (very subtle, drawn first)
                 if (isSecondaryPulsing && currentSecondaryGlowRadius > currentRadius) {
-                    // graphics.lineStyle(0); // No longer needed
-                    graphics.fill({ color: pulseGlowColor, alpha: secondaryPulseGlowAlpha * scaleFactor }); // Use pulse color, very low alpha
+                    graphics.fill({ color: pulseGlowColor, alpha: secondaryPulseGlowAlpha * scaleFactor });
                     graphics.circle(seg.x, seg.y, currentSecondaryGlowRadius);
                 }
-
-                // 1. Outline (Stroke)
-                graphics.setStrokeStyle({ width: Math.max(1, 2 * scaleFactor), color: baseOutlineColor, alpha: currentAlpha }); // Use setStrokeStyle
-                graphics.moveTo(seg.x + currentOutlineRadius, seg.y); // Need moveTo before arc for stroke
+                // Outline
+                graphics.setStrokeStyle({ width: Math.max(1, 2 * scaleFactor), color: baseOutlineColor, alpha: currentAlpha });
+                graphics.moveTo(seg.x + currentOutlineRadius, seg.y);
                 graphics.arc(seg.x, seg.y, currentOutlineRadius, 0, Math.PI * 2);
-                graphics.stroke(); // Apply the stroke
-
-                // 2. Primary Glow (Fill)
-                // graphics.lineStyle(0); // No longer needed
-                graphics.fill({ color: actualGlowColor, alpha: baseGlowAlpha * scaleFactor }); // Use actual (pulsed?) glow color
+                graphics.stroke();
+                // Primary glow
+                graphics.fill({ color: actualGlowColor, alpha: baseGlowAlpha * scaleFactor });
                 graphics.circle(seg.x, seg.y, currentGlowRadius);
-
-                // 3. Body (Fill)
-                graphics.fill({ color: actualBodyColor, alpha: currentAlpha }); // Use actual (pulsed?) body color
+                // Body fill
+                graphics.fill({ color: actualBodyColor, alpha: currentAlpha });
                 graphics.circle(seg.x, seg.y, currentRadius);
             }
-        } // End of body segment circle loop
+        }
 
-        // 4. --- Head & Eyes (Layered) --- (Draw head last so it's on top)
-         if (this.segs.length > 0) {
+        // 4. Head & Eyes (head drawn last on base graphics)
+        if (this.segs.length > 0) {
             const headSeg = this.segs[0];
-            const headGrowth = headSeg.growthProgress ?? 1.0; // Use head's own growth
-            const currentHeadRadius = headRadius * headGrowth; // Scale head radius by its growth
+            const headGrowth = headSeg.growthProgress ?? 1.0;
+            const currentHeadRadius = headRadius * headGrowth;
 
             if (currentHeadRadius > 0.1) {
-                // Head color is affected by global glow, but not pulsing swell
+                // Head outline
                 const headColor = this.glowFrames > 0 ? 0xffffff : baseHexColor;
-                // Use dynamic glow strength for head too, maybe slightly boosted
                 const headGlowStrength = dynamicPlayerGlowStrength + 2;
-                const currentHeadGlowRadius = currentHeadRadius + (headGlowStrength / 2) * headGrowth; // Scale glow addition
-                const currentHeadOutlineRadius = currentHeadRadius + 1 * headGrowth; // Scale outline addition
-                const currentHeadAlpha = baseAlpha * headGrowth; // Scale alpha
+                const currentHeadGlowRadius = currentHeadRadius + (headGlowStrength / 2) * headGrowth;
+                const currentHeadOutlineRadius = currentHeadRadius + 1 * headGrowth;
+                const currentHeadAlpha = baseAlpha * headGrowth;
 
-                // 1. Head Outline
-                graphics.setStrokeStyle({ width: Math.max(1, 2 * headGrowth), color: baseOutlineColor, alpha: currentHeadAlpha }); // Use setStrokeStyle
-                graphics.moveTo(headSeg.x + currentHeadOutlineRadius, headSeg.y); graphics.arc(headSeg.x, headSeg.y, currentHeadOutlineRadius, 0, Math.PI * 2); graphics.stroke();
-                // 2. Head Glow (Fill)
-                // graphics.lineStyle(0); // No longer needed
-                graphics.fill({ color: basePlayerGlowColor, alpha: baseGlowAlpha * headGrowth }); graphics.circle(headSeg.x, headSeg.y, currentHeadGlowRadius); // Use scaled glow alpha
-                // 3. Head Fill
-                graphics.fill({ color: headColor, alpha: currentHeadAlpha }); graphics.circle(headSeg.x, headSeg.y, currentHeadRadius); // Use scaled head alpha
+                graphics.setStrokeStyle({ width: Math.max(1, 2 * headGrowth), color: baseOutlineColor, alpha: currentHeadAlpha });
+                graphics.moveTo(headSeg.x + currentHeadOutlineRadius, headSeg.y);
+                graphics.arc(headSeg.x, headSeg.y, currentHeadOutlineRadius, 0, Math.PI * 2);
+                graphics.stroke();
+                // Head glow
+                graphics.fill({ color: basePlayerGlowColor, alpha: baseGlowAlpha * headGrowth });
+                graphics.circle(headSeg.x, headSeg.y, currentHeadGlowRadius);
+                // Head fill
+                graphics.fill({ color: headColor, alpha: currentHeadAlpha });
+                graphics.circle(headSeg.x, headSeg.y, currentHeadRadius);
 
-                // Define eye properties (some used by mouth if it were dynamic, good to have them defined)
-                const eyeAngle = Math.atan2(this.velocity.vy, this.velocity.vx); // Still useful for eye positioning
+                // Define eye properties (for positioning and drawing)
+                const eyeAngle = Math.atan2(this.velocity.vy, this.velocity.vx);
                 const eyeFillColor = 0x000000;
                 const eyeFillAlpha = 0.9 * headGrowth;
-
-                // --- Draw Eyes (Scaled by headGrowth) ---
-                const finalEyeRadius = Math.max(1, currentHeadRadius * 0.2); // Base size on current head radius, min 1px
-                const eyeDist = currentHeadRadius * 0.5; // Eye distance scales with head radius
+                const finalEyeRadius = Math.max(1, currentHeadRadius * 0.2);
+                const eyeDist = currentHeadRadius * 0.5;
                 const eyeAnglePerp = eyeAngle + Math.PI / 2;
-                const eye1X = headSeg.x + Math.cos(eyeAnglePerp) * eyeDist; const eye1Y = headSeg.y + Math.sin(eyeAnglePerp) * eyeDist;
-                const eye2X = headSeg.x - Math.cos(eyeAnglePerp) * eyeDist; const eye2Y = headSeg.y - Math.sin(eyeAnglePerp) * eyeDist;
+                const eye1X = headSeg.x + Math.cos(eyeAnglePerp) * eyeDist;
+                const eye1Y = headSeg.y + Math.sin(eyeAnglePerp) * eyeDist;
+                const eye2X = headSeg.x - Math.cos(eyeAnglePerp) * eyeDist;
+                const eye2Y = headSeg.y - Math.sin(eyeAnglePerp) * eyeDist;
                 const eyeGlowColor = 0xffffff;
-                const eyeGlowAlpha = 0.15 * headGrowth; // Scale eye glow alpha
-                const eyeGlowRadius = finalEyeRadius + Math.max(0.5, 2 * headGrowth); // Scale eye glow addition
+                const eyeGlowAlpha = 0.15 * headGrowth;
+                const eyeGlowRadius = finalEyeRadius + Math.max(0.5, 2 * headGrowth);
 
-                // Eye Glow (Fill)
-                graphics.fill({ color: eyeGlowColor, alpha: eyeGlowAlpha }); graphics.circle(eye1X, eye1Y, eyeGlowRadius); graphics.circle(eye2X, eye2Y, eyeGlowRadius);
-                // Eye Fill
-                graphics.fill({ color: eyeFillColor, alpha: eyeFillAlpha }); graphics.circle(eye1X, eye1Y, finalEyeRadius); graphics.circle(eye2X, eye2Y, finalEyeRadius);
+                // Draw eyes on separate eyeGraphics
+                this.eyeGraphics.clear();
+                // Eye glow
+                this.eyeGraphics.fill({ color: eyeGlowColor, alpha: eyeGlowAlpha });
+                this.eyeGraphics.circle(eye1X, eye1Y, eyeGlowRadius);
+                this.eyeGraphics.circle(eye2X, eye2Y, eyeGlowRadius);
+                // Eye fill
+                this.eyeGraphics.fill({ color: eyeFillColor, alpha: eyeFillAlpha });
+                this.eyeGraphics.circle(eye1X, eye1Y, finalEyeRadius);
+                this.eyeGraphics.circle(eye2X, eye2Y, finalEyeRadius);
 
+                // Draw mouth on separate mouthGraphics
+                const mouthAngle = eyeAngle;
+                const mouthSpread = Math.PI / 6; // spread angle for mouth corners
+                const leftAngle = mouthAngle + mouthSpread;
+                const rightAngle = mouthAngle - mouthSpread;
+                const leftX = headSeg.x + Math.cos(leftAngle) * currentHeadRadius;
+                const leftY = headSeg.y + Math.sin(leftAngle) * currentHeadRadius;
+                const rightX = headSeg.x + Math.cos(rightAngle) * currentHeadRadius;
+                const rightY = headSeg.y + Math.sin(rightAngle) * currentHeadRadius;
+                const frontX = headSeg.x + Math.cos(mouthAngle) * currentHeadRadius;
+                const frontY = headSeg.y + Math.sin(mouthAngle) * currentHeadRadius;
+                this.mouthGraphics.clear();
+                this.mouthGraphics.beginFill(0x000000, 1.0);
+                this.mouthGraphics.drawPolygon([frontX, frontY, leftX, leftY, rightX, rightY]);
+                this.mouthGraphics.endFill();
             }
         }
-    } // End syncPixi
+    }
 
-    // destroyPixi is inherited from Serpent
-
-    // --- Player-Specific Logic Methods ---
-
-    // setDirection is inherited from Serpent
-
-    // Player-specific turn logic
+    // Player-specific turn logic (override base attemptTurn for additional checks)
     override attemptTurn(desiredDir: Point, currentTimestamp: number, turnCooldown: number): boolean {
-        // Basic cooldown check (could call super.attemptTurn for this part if it only did cooldown)
+        // Basic cooldown check
         if (currentTimestamp - this.lastTurnTimestamp <= turnCooldown) return false;
 
-        // Player-specific checks: No 180 turns, check for self-collision
+        // Prevent 180-degree turns and self-collision
         const dotProduct = desiredDir.x * this.velocity.vx + desiredDir.y * this.velocity.vy;
         if (dotProduct < -0.9) return false;
         const head = this.segs[0];
@@ -271,11 +297,12 @@ export class PlayerSerpent extends Serpent {
         const skipCount = this.calculateSkipSegments();
         const wouldBite = this.willHitTail(nextX, nextY, skipCount);
         if (wouldBite) return false;
+
+        // If checks pass, update velocity and timestamp
         this.velocity.vx = desiredDir.x;
         this.velocity.vy = desiredDir.y;
         this.lastTurnTimestamp = currentTimestamp;
-        // If checks pass, update velocity and timestamp
-        this.setDirection(desiredDir.x, desiredDir.y); // Use inherited setDirection
+        this.setDirection(desiredDir.x, desiredDir.y);
         this.lastTurnTimestamp = currentTimestamp;
         return true;
     }

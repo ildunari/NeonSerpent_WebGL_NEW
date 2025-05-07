@@ -65,72 +65,46 @@ class InputHandler {
         const baseAlpha = 0.3;
         const knobAlpha = 0.5;
 
-        // Create base graphics
+        // Base circle (outer)
         this.joystickBaseGraphics = new PIXI.Graphics();
-        this.joystickBaseGraphics.circle(0, 0, baseRadius);
-        this.joystickBaseGraphics.fill({ color: baseColor, alpha: baseAlpha });
-        this.joystickContainer.addChild(this.joystickBaseGraphics);
+        this.joystickBaseGraphics.beginFill(baseColor, baseAlpha);
+        this.joystickBaseGraphics.drawCircle(0, 0, baseRadius);
+        this.joystickBaseGraphics.endFill();
 
-        // Create knob graphics
+        // Knob circle (inner)
         this.joystickKnobGraphics = new PIXI.Graphics();
-        this.joystickKnobGraphics.circle(0, 0, knobRadius);
-        this.joystickKnobGraphics.fill({ color: knobColor, alpha: knobAlpha });
+        this.joystickKnobGraphics.beginFill(knobColor, knobAlpha);
+        this.joystickKnobGraphics.drawCircle(0, 0, knobRadius);
+        this.joystickKnobGraphics.endFill();
+
+        // Center the knob initially
+        this.joystickKnobGraphics.position.set(0, 0);
+
+        // Add base and knob to container
+        this.joystickContainer.addChild(this.joystickBaseGraphics);
         this.joystickContainer.addChild(this.joystickKnobGraphics);
 
-        // Add the container to the main stage
+        // Add the joystick container to the stage
         stage.addChild(this.joystickContainer);
-
-        // Set max travel radius based on base radius
-        this.joystick.maxTravelRadius = baseRadius - knobRadius / 2; // Knob center shouldn't go past base edge
-
-        console.log('Joystick graphics initialized.');
     }
 
-    /** Updates the joystick graphics based on the current state */
+    /** Updates the joystick graphics based on current state */
     updateJoystickGraphics(): void {
         if (!this.joystickContainer || !this.joystickBaseGraphics || !this.joystickKnobGraphics) {
             return;
         }
-
-        this.joystickContainer.visible = this.joystick.active;
-
-        if (this.joystick.active && this.joystick.startPosition && this.joystick.currentPosition) {
-            // Position the container (base) at the start position
-            this.joystickContainer.position.set(this.joystick.startPosition.x, this.joystick.startPosition.y);
-
-            // Calculate knob position relative to the base center
-            let knobX = this.joystick.currentPosition.x - this.joystick.startPosition.x;
-            let knobY = this.joystick.currentPosition.y - this.joystick.startPosition.y;
-            const distance = Math.hypot(knobX, knobY);
-
-            // Clamp knob position within the max travel radius
-            const maxRadius = this.joystick.maxTravelRadius ?? 50; // Use default if not set
-            if (distance > maxRadius) {
-                const scale = maxRadius / distance;
-                knobX *= scale;
-                knobY *= scale;
-            }
-
-            // Apply deadzone visually (optional, could just snap to center if vector is 0,0)
-            if (this.joystick.vector.x === 0 && this.joystick.vector.y === 0) {
-                 knobX = 0;
-                 knobY = 0;
-            }
-
-
-            this.joystickKnobGraphics.position.set(knobX, knobY);
-        }
-    }
-
-    /** Cleans up the joystick graphics */
-    destroyJoystickGraphics(): void {
-        if (this.joystickContainer) {
-            this.joystickContainer.parent?.removeChild(this.joystickContainer);
-            this.joystickContainer.destroy({ children: true });
-            this.joystickContainer = null;
-            this.joystickBaseGraphics = null;
-            this.joystickKnobGraphics = null;
-            console.log('Joystick graphics destroyed.');
+        if (!this.joystick.active) {
+            // Hide joystick when inactive
+            this.joystickContainer.visible = false;
+        } else {
+            // Show joystick and update position
+            this.joystickContainer.visible = true;
+            // Place joystick at the start position
+            this.joystickContainer.position.set(this.joystick.startPosition!.x, this.joystick.startPosition!.y);
+            // Update knob position relative to base
+            const dx = this.joystick.currentPosition!.x - this.joystick.startPosition!.x;
+            const dy = this.joystick.currentPosition!.y - this.joystick.startPosition!.y;
+            this.joystickKnobGraphics.position.set(dx, dy);
         }
     }
 
@@ -219,10 +193,9 @@ class InputHandler {
             case 'ArrowRight':
                 this.moveRight = true;
                 break;
-            // Space bar will be handled separately for firing later
-            // case ' ':
-            //     this.isFiring = true; // Example if space also fires
-            //     break;
+            case ' ':
+                this.isFiring = true;
+                break;
         }
         // Store generic key state if needed elsewhere
         // this.keys[event.key] = true;
@@ -246,9 +219,9 @@ class InputHandler {
             case 'ArrowRight':
                 this.moveRight = false;
                 break;
-            // case ' ':
-            //     this.isFiring = false; // Example if space also fires
-            //     break;
+            case ' ':
+                this.isFiring = false;
+                break;
         }
          // Store generic key state if needed elsewhere
         // delete this.keys[event.key];
@@ -281,17 +254,11 @@ class InputHandler {
         }
         const touch = event.touches[0];
         const rect = this.canvas.getBoundingClientRect();
-        this.joystick.currentPosition = {
-            x: touch.clientX - rect.left,
-            y: touch.clientY - rect.top
-        };
-
-        // Calculate vector from start to current
-        let dx = this.joystick.currentPosition.x - this.joystick.startPosition.x;
-        let dy = this.joystick.currentPosition.y - this.joystick.startPosition.y;
+        const dx = touch.clientX - rect.left - this.joystick.startPosition.x;
+        const dy = touch.clientY - rect.top - this.joystick.startPosition.y;
         const distance = Math.hypot(dx, dy);
 
-        // Apply deadzone
+        // If within deadzone, ignore movement (keep vector at 0,0)
         if (distance < this.joystick.deadzoneRadius) {
             this.joystick.vector = { x: 0, y: 0 };
         } else {
